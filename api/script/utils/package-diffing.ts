@@ -63,12 +63,14 @@ export class PackageDiffer {
       .all<any>([manifestPromise, historyPromise, newReleaseFilePromise])
       .spread((newManifest: PackageManifest, history: storageTypes.Package[], downloadedArchiveFile: string) => {
         newFilePath = downloadedArchiveFile;
+        console.log(`[DIFF] New package ${newPackage.label} appVersion=${newPackage.appVersion}, history length=${history ? history.length : 0}`);
         const packagesToDiff: storageTypes.Package[] = this.getPackagesToDiff(
           history,
           newPackage.appVersion,
           newPackage.packageHash,
           newPackage.label
         );
+        console.log(`[DIFF] Packages to diff against: ${packagesToDiff ? packagesToDiff.map(p => `${p.label}(appVer=${p.appVersion}, hash=${p.packageHash?.substring(0,8)}, manifest=${!!p.manifestBlobUrl})`).join(', ') : 'NONE'}`);
         const diffBlobInfoPromises: Promise<DiffBlobInfo>[] = [];
         if (packagesToDiff) {
           packagesToDiff.forEach((appPackage: storageTypes.Package) => {
@@ -84,6 +86,8 @@ export class PackageDiffer {
         // all done, delete the downloaded archive file.
         fs.unlinkSync(newFilePath);
 
+        console.log(`[DIFF] diffBlobInfoList: ${JSON.stringify(diffBlobInfoList?.map(d => d ? { hash: d.packageHash?.substring(0,8), size: d.blobInfo?.size } : null))}`);
+
         if (diffBlobInfoList && diffBlobInfoList.length) {
           let diffPackageMap: storageTypes.PackageHashToBlobInfoMap = null;
           diffBlobInfoList.forEach((diffBlobInfo: DiffBlobInfo) => {
@@ -98,7 +102,10 @@ export class PackageDiffer {
           return q<storageTypes.PackageHashToBlobInfoMap>(null);
         }
       })
-      .catch(diffErrorUtils.diffErrorHandler);
+      .catch((err: any) => {
+        console.error(`[DIFF] Error during diff generation:`, err);
+        return diffErrorUtils.diffErrorHandler(err);
+      });
   }
 
   public generateDiffArchive(oldManifest: PackageManifest, newManifest: PackageManifest, newArchiveFilePath: string): Promise<string> {
@@ -248,14 +255,18 @@ export class PackageDiffer {
   ): Promise<DiffBlobInfo> {
     if (!appPackage || appPackage.packageHash === newPackageHash) {
       // If the packageHash matches, no need to calculate diff, its the same package.
+      console.log(`[DIFF] Skipping ${appPackage?.label}: same packageHash`);
       return q<DiffBlobInfo>(null);
     }
 
+    console.log(`[DIFF] Generating diff for old package ${appPackage.label}, manifestBlobUrl=${appPackage.manifestBlobUrl ? 'YES' : 'NO'}`);
     return this.getManifest(appPackage)
       .then((existingManifest?: PackageManifest) => {
+        console.log(`[DIFF] Old manifest for ${appPackage.label}: ${existingManifest ? `entries=${existingManifest.toMap().size}` : 'NULL'}`);
         return this.generateDiffArchive(existingManifest, newManifest, newFilePath);
       })
       .then((diffArchiveFilePath?: string): Promise<storageTypes.BlobInfo> => {
+        console.log(`[DIFF] Diff archive for ${appPackage.label}: ${diffArchiveFilePath || 'NULL'}`);
         if (diffArchiveFilePath) {
           return this.uploadDiffArchiveBlob(security.generateSecureKey(accountId), diffArchiveFilePath);
         }
@@ -263,6 +274,7 @@ export class PackageDiffer {
         return q(<storageTypes.BlobInfo>null);
       })
       .then((blobInfo: storageTypes.BlobInfo) => {
+        console.log(`[DIFF] Blob info for ${appPackage.label}: ${blobInfo ? `size=${blobInfo.size}` : 'NULL'}`);
         if (blobInfo) {
           return { packageHash: appPackage.packageHash, blobInfo: blobInfo };
         } else {
