@@ -63,7 +63,7 @@ export class PackageDiffer {
       .all<any>([manifestPromise, historyPromise, newReleaseFilePromise])
       .spread((newManifest: PackageManifest, history: storageTypes.Package[], downloadedArchiveFile: string) => {
         newFilePath = downloadedArchiveFile;
-        console.log(`[DIFF] New package ${newPackage.label} appVersion=${newPackage.appVersion}, history length=${history ? history.length : 0}`);
+        console.log(`[DIFF] New package ${newPackage.label} appVersion=${newPackage.appVersion}, history length=${history ? history.length : 0}, newManifest=${newManifest ? `entries=${newManifest.toMap().size}` : 'NULL'}`);
         const packagesToDiff: storageTypes.Package[] = this.getPackagesToDiff(
           history,
           newPackage.appVersion,
@@ -112,13 +112,17 @@ export class PackageDiffer {
     return Promise<string>(
       (resolve: (value?: string | Promise<string>) => void, reject: (reason: any) => void, notify: (progress: any) => void): void => {
         if (!oldManifest || !newManifest) {
+          console.log(`[DIFF] generateDiffArchive: NULL manifest — old=${!!oldManifest}, new=${!!newManifest}`);
           resolve(null);
           return;
         }
 
         const diff: IArchiveDiff = PackageDiffer.generateDiff(oldManifest.toMap(), newManifest.toMap());
 
+        console.log(`[DIFF] generateDiffArchive: deletedFiles=${diff.deletedFiles.length}, newOrUpdated=${diff.newOrUpdatedEntries.size}`);
+
         if (diff.deletedFiles.length === 0 && diff.newOrUpdatedEntries.size === 0) {
+          console.log(`[DIFF] generateDiffArchive: identical content, no diff needed`);
           resolve(null);
           return;
         }
