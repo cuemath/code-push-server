@@ -148,6 +148,9 @@ export class PackageDiffer {
               return;
             }
 
+            let pendingEntries = 0;
+            let readStreamError = null;
+
             zipFile
               .on("error", (error: any): void => {
                 reject(error);
@@ -163,8 +166,7 @@ export class PackageDiffer {
                   return;
                 }
 
-                let readStreamCounter = 0; // Counter to track the number of read streams
-                let readStreamError = null; // Error flag for read streams
+                pendingEntries++;
 
                 zipFile.openReadStream(entry, (error?: any, readStream?: stream.Readable): void => {
                   if (error) {
@@ -172,35 +174,21 @@ export class PackageDiffer {
                     return;
                   }
 
-                  readStreamCounter++;
-
                   readStream
                     .on("error", (error: any): void => {
                       readStreamError = error;
                       reject(error);
-                    })
-                    .on("end", (): void => {
-                      readStreamCounter--;
-                      if (readStreamCounter === 0 && !readStreamError) {
-                        // All read streams have completed successfully
-                        resolve();
-                      }
                     });
 
                   diffFile.addReadStream(readStream, entry.fileName);
                 });
-
-                zipFile.on("close", (): void => {
-                  if (readStreamCounter === 0) {
-                    // All read streams have completed, no need to wait
-                    if (readStreamError) {
-                      reject(readStreamError);
-                    } else {
-                      diffFile.end();
-                      resolve();
-                    }
-                  }
-                });
+              })
+              .on("end", (): void => {
+                // All entries have been read from the source zip.
+                // Now finalize the diff zip — the writeStream "close" handler will resolve.
+                if (!readStreamError) {
+                  diffFile.end();
+                }
               });
           });
         } else {
