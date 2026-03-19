@@ -1299,7 +1299,7 @@ export function getManagementRouter(config: ManagementConfig): Router {
       .generateDiffPackageMap(accountId, appId, deploymentId, appPackage)
       .then((diffPackageMap: storageTypes.PackageHashToBlobInfoMap) => {
         console.log(`Package processed, adding diff info`);
-        addDiffInfoForPackage(accountId, appId, deploymentId, appPackage, diffPackageMap);
+        return addDiffInfoForPackage(accountId, appId, deploymentId, appPackage, diffPackageMap);
       });
   }
 
